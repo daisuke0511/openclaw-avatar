@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.OpenClawAvatar" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
+        <item name="colorPrimary">#00c9a7</item>
+        <item name="colorPrimaryVariant">#007a62</item>
+        <item name="colorOnPrimary">#000000</item>
+        <item name="colorSurface">#0d1b2a</item>
+        <item name="android:windowBackground">#0d1b2a</item>
+    </style>
+</resources>
