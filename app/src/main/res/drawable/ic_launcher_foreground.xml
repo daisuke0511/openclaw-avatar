@@ -4,21 +4,28 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- head -->
+    <!-- head (rounded rect) -->
     <path
         android:fillColor="#00c9a7"
         android:pathData="M30,14 h48 a12,12 0 0 1 12,12 v26 a12,12 0 0 1 -12,12 h-48 a12,12 0 0 1 -12,-12 v-26 a12,12 0 0 1 12,-12 z"/>
-    <!-- eyes -->
-    <circle android:fillColor="#0d2033" android:cx="42" android:cy="30" android:r="6"/>
-    <circle android:fillColor="#0d2033" android:cx="66" android:cy="30" android:r="6"/>
+    <!-- left eye (circle cx=42 cy=30 r=6) -->
+    <path
+        android:fillColor="#0d2033"
+        android:pathData="M42,30 m-6,0 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0"/>
+    <!-- right eye (circle cx=66 cy=30 r=6) -->
+    <path
+        android:fillColor="#0d2033"
+        android:pathData="M66,30 m-6,0 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0"/>
     <!-- mouth -->
-    <path android:fillColor="#0d2033"
+    <path
+        android:fillColor="#0d2033"
         android:pathData="M38,46 h32 a2,2 0 0 1 2,2 v3 a2,2 0 0 1 -2,2 h-32 a2,2 0 0 1 -2,-2 v-3 a2,2 0 0 1 2,-2 z"/>
-    <!-- body -->
+    <!-- body (rounded rect) -->
     <path
         android:fillColor="#007a62"
         android:pathData="M26,68 h56 a8,8 0 0 1 8,8 v24 a8,8 0 0 1 -8,8 h-56 a8,8 0 0 1 -8,-8 v-24 a8,8 0 0 1 8,-8 z"/>
-    <!-- body screen -->
-    <rect android:fillColor="#4fc3f7" android:x="36" android:y="74" android:width="36" android:height="20"
-        android:rx="3" android:ry="3"/>
+    <!-- body screen (plain rect) -->
+    <path
+        android:fillColor="#4fc3f7"
+        android:pathData="M36,74 h36 v20 h-36 z"/>
 </vector>
