@@ -110,8 +110,8 @@ class AvatarService : Service() {
         @Suppress("DEPRECATION")
         windowManager.defaultDisplay.getRealMetrics(dm)
 
-        val avatarWidthPx  = (180 * dm.density).toInt()
-        val avatarHeightPx = (216 * dm.density).toInt()  // 180x1.2 keeps 100:120 ratio
+        val avatarWidthPx  = (90 * dm.density).toInt()
+        val avatarHeightPx = (108 * dm.density).toInt()
 
         val params = WindowManager.LayoutParams(
             avatarWidthPx,
