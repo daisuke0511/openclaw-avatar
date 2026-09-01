@@ -32,7 +32,11 @@ class AvatarService : Service() {
     }
 
     // --- State machine ---
-    enum class State { IDLE, WALK_RIGHT, WALK_LEFT, SLEEP, JUMP, WAVE }
+    enum class State {
+        IDLE, WALK_RIGHT, WALK_LEFT, SLEEP, JUMP, WAVE,
+        HAPPY_SITTING, YAWN, TEDDY, SHH, SHH_SITTING,
+        PLEASE, CRY, HEART, SURPRISED, WAVE_SITTING
+    }
 
     private data class StateConfig(
         val frames: List<String>,
@@ -43,21 +47,41 @@ class AvatarService : Service() {
     )
 
     private val stateConfigs = mapOf(
-        State.IDLE       to StateConfig(listOf("idle"),                       0f, 0f, 2000, 6000),
-        State.WALK_RIGHT to StateConfig(listOf("walk_rt_0","walk_rt_1","walk_rt_2"), 1f, 0f, 4000, 10000),
-        State.WALK_LEFT  to StateConfig(listOf("walk_lt_0","walk_lt_1","walk_lt_2"),-1f, 0f, 4000, 10000),
-        State.SLEEP      to StateConfig(listOf("sleep_0","sleep_1"),          0f, 0f, 8000, 20000),
-        State.JUMP       to StateConfig(listOf("jump"),                       0f,-1f, 1200, 1200),
-        State.WAVE       to StateConfig(listOf("wave"),                       0f, 0f, 2000, 3000),
+        State.IDLE          to StateConfig(listOf("idle"),                                           0f, 0f, 2000, 5000),
+        State.WALK_RIGHT    to StateConfig(listOf("walk_rt_0","walk_rt_1","walk_rt_2","walk_rt_3"),  1f, 0f, 4000, 10000),
+        State.WALK_LEFT     to StateConfig(listOf("walk_lt_0","walk_lt_1","walk_lt_2","walk_lt_3"), -1f, 0f, 4000, 10000),
+        State.SLEEP         to StateConfig(listOf("sleep_0","sleep_1"),                              0f, 0f, 8000, 20000),
+        State.JUMP          to StateConfig(listOf("jump"),                                           0f,-1f, 1200, 1200),
+        State.WAVE          to StateConfig(listOf("wave"),                                           0f, 0f, 2000, 3000),
+        State.HAPPY_SITTING to StateConfig(listOf("happy_sitting"),                                  0f, 0f, 2000, 4000),
+        State.YAWN          to StateConfig(listOf("yawn"),                                           0f, 0f, 2000, 3000),
+        State.TEDDY         to StateConfig(listOf("teddy"),                                          0f, 0f, 3000, 6000),
+        State.SHH           to StateConfig(listOf("shh"),                                            0f, 0f, 2000, 3000),
+        State.SHH_SITTING   to StateConfig(listOf("shh_sitting"),                                    0f, 0f, 2000, 3000),
+        State.PLEASE        to StateConfig(listOf("please"),                                         0f, 0f, 2000, 3000),
+        State.CRY           to StateConfig(listOf("cry"),                                            0f, 0f, 2000, 4000),
+        State.HEART         to StateConfig(listOf("heart"),                                          0f, 0f, 2000, 3000),
+        State.SURPRISED     to StateConfig(listOf("surprised"),                                      0f, 0f, 1500, 2000),
+        State.WAVE_SITTING  to StateConfig(listOf("wave_sitting"),                                   0f, 0f, 2000, 3000),
     )
 
     private val nextStates = mapOf(
-        State.IDLE       to listOf(State.WALK_RIGHT, State.WALK_LEFT, State.SLEEP, State.WAVE),
-        State.WALK_RIGHT to listOf(State.IDLE, State.WALK_LEFT, State.JUMP, State.WAVE),
-        State.WALK_LEFT  to listOf(State.IDLE, State.WALK_RIGHT, State.JUMP, State.WAVE),
-        State.SLEEP      to listOf(State.IDLE),
-        State.JUMP       to listOf(State.WALK_RIGHT, State.WALK_LEFT, State.IDLE),
-        State.WAVE       to listOf(State.IDLE, State.WALK_RIGHT, State.WALK_LEFT),
+        State.IDLE          to listOf(State.WALK_RIGHT, State.WALK_LEFT, State.SLEEP, State.WAVE, State.HAPPY_SITTING, State.YAWN, State.TEDDY, State.HEART),
+        State.WALK_RIGHT    to listOf(State.IDLE, State.WALK_LEFT, State.JUMP, State.WAVE, State.SURPRISED, State.SHH),
+        State.WALK_LEFT     to listOf(State.IDLE, State.WALK_RIGHT, State.JUMP, State.WAVE, State.SURPRISED, State.SHH),
+        State.SLEEP         to listOf(State.IDLE, State.YAWN),
+        State.JUMP          to listOf(State.WALK_RIGHT, State.WALK_LEFT, State.IDLE),
+        State.WAVE          to listOf(State.IDLE, State.WALK_RIGHT, State.WALK_LEFT, State.WAVE_SITTING),
+        State.HAPPY_SITTING to listOf(State.IDLE, State.WALK_RIGHT, State.WALK_LEFT),
+        State.YAWN          to listOf(State.SLEEP, State.IDLE),
+        State.TEDDY         to listOf(State.SLEEP, State.IDLE, State.HAPPY_SITTING),
+        State.SHH           to listOf(State.IDLE, State.SHH_SITTING),
+        State.SHH_SITTING   to listOf(State.IDLE, State.WALK_RIGHT, State.WALK_LEFT),
+        State.PLEASE        to listOf(State.IDLE, State.CRY, State.HAPPY_SITTING),
+        State.CRY           to listOf(State.IDLE, State.PLEASE),
+        State.HEART         to listOf(State.IDLE, State.WAVE, State.HAPPY_SITTING),
+        State.SURPRISED     to listOf(State.IDLE, State.WALK_RIGHT, State.WALK_LEFT),
+        State.WAVE_SITTING  to listOf(State.IDLE, State.WALK_RIGHT, State.WALK_LEFT),
     )
 
     private var currentState = State.IDLE
