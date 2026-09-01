@@ -4,8 +4,6 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.RectF
 import android.util.AttributeSet
@@ -17,62 +15,44 @@ class AvatarView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : View(context, attrs, defStyleAttr) {
 
-    private val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-    private var characterBitmap: Bitmap? = null
-    private var flipped = false
-    private val flipMatrix = Matrix()
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val sprites = mutableMapOf<String, Bitmap>()
+    private var currentSprite: Bitmap? = null
+    private val dest = RectF()
 
-    fun setFlipped(flip: Boolean) {
-        if (flipped != flip) {
-            flipped = flip
+    init {
+        loadSprites()
+        currentSprite = sprites["idle"]
+    }
+
+    private fun loadSprites() {
+        val names = listOf(
+            "idle",
+            "walk_rt_0", "walk_rt_1", "walk_rt_2",
+            "walk_lt_0", "walk_lt_1", "walk_lt_2",
+            "sleep_0", "sleep_1",
+            "jump", "wave"
+        )
+        for (name in names) {
+            try {
+                val input = context.assets.open("sprites/$name.png")
+                sprites[name] = BitmapFactory.decodeStream(input)
+                input.close()
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun showSprite(name: String) {
+        val bmp = sprites[name] ?: return
+        if (currentSprite !== bmp) {
+            currentSprite = bmp
             invalidate()
         }
     }
 
-    init {
-        loadCharacter()
-    }
-
-    private fun loadCharacter() {
-        try {
-            val input = context.assets.open("character.png")
-            val full = BitmapFactory.decodeStream(input)
-            input.close()
-            // Crop to main standing character (far-left of sprite sheet)
-            // Sprite sheet is 1536x1024; main character is roughly left 15% x top 60%
-            val cropW = (full.width * 0.15f).toInt()
-            val cropH = (full.height * 0.60f).toInt()
-            val cropped = Bitmap.createBitmap(full, 0, 0, cropW, cropH)
-            full.recycle()
-            characterBitmap = removeWhiteBackground(cropped)
-        } catch (_: Exception) {}
-    }
-
-    private fun removeWhiteBackground(src: Bitmap, threshold: Int = 30): Bitmap {
-        val result = src.copy(Bitmap.Config.ARGB_8888, true)
-        val pixels = IntArray(result.width * result.height)
-        result.getPixels(pixels, 0, result.width, 0, 0, result.width, result.height)
-        for (i in pixels.indices) {
-            val r = (pixels[i] shr 16) and 0xFF
-            val g = (pixels[i] shr 8) and 0xFF
-            val b = pixels[i] and 0xFF
-            if (r >= 255 - threshold && g >= 255 - threshold && b >= 255 - threshold) {
-                pixels[i] = Color.TRANSPARENT
-            }
-        }
-        result.setPixels(pixels, 0, result.width, 0, 0, result.width, result.height)
-        src.recycle()
-        return result
-    }
-
     override fun onDraw(canvas: Canvas) {
-        val bmp = characterBitmap ?: return
-        if (flipped) {
-            flipMatrix.setScale(-1f, 1f, width / 2f, height / 2f)
-            canvas.save()
-            canvas.concat(flipMatrix)
-        }
-        canvas.drawBitmap(bmp, null, RectF(0f, 0f, width.toFloat(), height.toFloat()), bitmapPaint)
-        if (flipped) canvas.restore()
+        val bmp = currentSprite ?: return
+        dest.set(0f, 0f, width.toFloat(), height.toFloat())
+        canvas.drawBitmap(bmp, null, dest, paint)
     }
 }
