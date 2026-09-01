@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.RectF
 import android.util.AttributeSet
@@ -18,6 +19,15 @@ class AvatarView @JvmOverloads constructor(
 
     private val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private var characterBitmap: Bitmap? = null
+    private var flipped = false
+    private val flipMatrix = Matrix()
+
+    fun setFlipped(flip: Boolean) {
+        if (flipped != flip) {
+            flipped = flip
+            invalidate()
+        }
+    }
 
     init {
         loadCharacter()
@@ -57,6 +67,12 @@ class AvatarView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         val bmp = characterBitmap ?: return
+        if (flipped) {
+            flipMatrix.setScale(-1f, 1f, width / 2f, height / 2f)
+            canvas.save()
+            canvas.concat(flipMatrix)
+        }
         canvas.drawBitmap(bmp, null, RectF(0f, 0f, width.toFloat(), height.toFloat()), bitmapPaint)
+        if (flipped) canvas.restore()
     }
 }
