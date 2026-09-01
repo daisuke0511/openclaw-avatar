@@ -46,3 +46,11 @@ jobs:
           name: openclaw-avatar-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
+
+      - name: Release latest APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest Build
+          prerelease: true
+          files: app/build/outputs/apk/debug/app-debug.apk
