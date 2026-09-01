@@ -22,20 +22,16 @@ class AvatarView @JvmOverloads constructor(
 
     init {
         loadSprites()
-        currentSprite = sprites["idle"]
+        currentSprite = sprites.values.firstOrNull()
     }
 
     private fun loadSprites() {
-        val names = listOf(
-            "idle",
-            "walk_rt_0", "walk_rt_1", "walk_rt_2",
-            "walk_lt_0", "walk_lt_1", "walk_lt_2",
-            "sleep_0", "sleep_1",
-            "jump", "wave"
-        )
-        for (name in names) {
+        val files = try { context.assets.list("sprites") ?: emptyArray() } catch (_: Exception) { emptyArray() }
+        for (file in files) {
+            if (!file.endsWith(".png")) continue
+            val name = file.removeSuffix(".png")
             try {
-                val input = context.assets.open("sprites/$name.png")
+                val input = context.assets.open("sprites/$file")
                 sprites[name] = BitmapFactory.decodeStream(input)
                 input.close()
             } catch (_: Exception) {}
