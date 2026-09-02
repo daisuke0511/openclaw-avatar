@@ -49,10 +49,13 @@ class RealtimeClient(
 
     fun connect() {
         val url = "$BASE_URL?model=$model"
+        // For ephemeral tokens on client devices, OpenAI uses WebSocket subprotocols
+        // instead of the Authorization header (browsers can't set custom WS headers).
+        // OkHttp can use both, but subprotocol is the officially supported path.
         val req = Request.Builder()
             .url(url)
-            .addHeader("Authorization", "Bearer $ephemeralToken")
-            .addHeader("OpenAI-Beta", "realtime=v1")
+            .addHeader("Sec-WebSocket-Protocol",
+                "realtime, openai-insecure-api-key.$ephemeralToken")
             .build()
         ws = http.newWebSocket(req, listener)
     }
@@ -104,14 +107,18 @@ class RealtimeClient(
 
     private val listener = object : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
-            Log.i(TAG, "ws open")
+            Log.i(TAG, "ws open: ${response.code} ${response.message} proto=${response.header("Sec-WebSocket-Protocol")}")
             callbacks.onOpen()
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
             try {
                 val obj = JSONObject(text)
-                when (val type = obj.optString("type")) {
+                val eventType = obj.optString("type")
+                if (eventType != "response.audio.delta" && eventType != "response.audio_transcript.delta") {
+                    Log.d(TAG, "event: $eventType")
+                }
+                when (val type = eventType) {
                     "session.created", "session.updated" -> callbacks.onSessionUpdated()
                     "input_audio_buffer.speech_started" -> callbacks.onUserSpeechStarted()
                     "input_audio_buffer.speech_stopped" -> callbacks.onUserSpeechStopped()
@@ -155,8 +162,9 @@ class RealtimeClient(
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-            Log.e(TAG, "ws failure: ${t.message}")
-            callbacks.onError("connection failure: ${t.message}")
+            val bodySnippet = try { response?.body?.string()?.take(300) } catch (_: Exception) { null }
+            Log.e(TAG, "ws failure: ${t.message} code=${response?.code} body=$bodySnippet")
+            callbacks.onError("ws failed ${response?.code}: ${t.message} ${bodySnippet ?: ""}")
         }
 
         override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
