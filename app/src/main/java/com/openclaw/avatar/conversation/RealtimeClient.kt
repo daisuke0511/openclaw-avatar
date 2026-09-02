@@ -123,21 +123,26 @@ class RealtimeClient(
                     "input_audio_buffer.speech_started" -> callbacks.onUserSpeechStarted()
                     "input_audio_buffer.speech_stopped" -> callbacks.onUserSpeechStopped()
                     "response.created" -> callbacks.onResponseStarted()
-                    "response.audio.delta" -> {
+                    // GA event names use response.output_audio.*; keep legacy aliases
+                    "response.audio.delta",
+                    "response.output_audio.delta" -> {
                         val delta = obj.optString("delta", "")
                         if (delta.isNotEmpty()) {
                             val pcm = Base64.decode(delta, Base64.DEFAULT)
                             callbacks.onAudioDelta(pcm)
                         }
                     }
-                    "response.audio.done" -> callbacks.onAudioDone()
+                    "response.audio.done",
+                    "response.output_audio.done" -> callbacks.onAudioDone()
                     "response.done" -> callbacks.onAudioDone()
                     "conversation.item.input_audio_transcription.completed" -> {
                         val txt = obj.optString("transcript", "")
                         if (txt.isNotEmpty()) callbacks.onUserTranscript(txt)
                     }
-                    "response.audio_transcript.delta" -> { /* partial text, ignore */ }
-                    "response.audio_transcript.done" -> {
+                    "response.audio_transcript.delta",
+                    "response.output_audio_transcript.delta" -> { /* partial text, ignore */ }
+                    "response.audio_transcript.done",
+                    "response.output_audio_transcript.done" -> {
                         val txt = obj.optString("transcript", "")
                         if (txt.isNotEmpty()) callbacks.onAssistantText(txt)
                     }
