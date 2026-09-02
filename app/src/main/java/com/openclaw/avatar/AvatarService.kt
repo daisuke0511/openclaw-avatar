@@ -4,9 +4,12 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
+import android.net.ConnectivityManager
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -18,10 +21,14 @@ import android.view.View
 import android.view.WindowManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import com.openclaw.avatar.bridge.AvatarBridgeServer
+import com.openclaw.avatar.bridge.BridgeRouter
 import com.openclaw.avatar.events.AvatarEvent
 import com.openclaw.avatar.events.EventBus
 import com.openclaw.avatar.state.AvatarStateManager
 import com.openclaw.avatar.state.NextStateProvider
+import com.openclaw.avatar.system.BatteryReceiver
+import com.openclaw.avatar.system.NetworkListener
 import kotlin.math.abs
 import kotlin.random.Random
 
@@ -113,9 +120,12 @@ class AvatarService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private var animTick = 0
 
-    // --- Integration hooks (Phase 2/3) ---
+    // --- Integration hooks (Phase 2/3/4/5/6) ---
     internal var nextStateProvider: NextStateProvider? = null
     private var stateManager: AvatarStateManager? = null
+    private var bridgeServer: AvatarBridgeServer? = null
+    private var batteryReceiver: BatteryReceiver? = null
+    private var networkListener: NetworkListener? = null
 
     // Position accessor for state manager snapshots
     internal val positionX: Int get() = layoutParams?.x ?: 0
@@ -145,9 +155,35 @@ class AvatarService : Service() {
         super.onCreate()
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         createNotificationChannel()
-        stateManager = AvatarStateManager(this).also {
-            nextStateProvider = it
-            EventBus.subscribe(it::onEvent)
+        val mgr = AvatarStateManager(this)
+        stateManager = mgr
+        nextStateProvider = mgr
+        EventBus.subscribe(mgr::onEvent)
+
+        val router = BridgeRouter(mgr)
+        val server = AvatarBridgeServer(router::handle)
+        val port = server.start()
+        mgr.bridgePort = port
+        bridgeServer = server
+
+        // Battery events
+        val br = BatteryReceiver()
+        val bf = IntentFilter().apply {
+            addAction(Intent.ACTION_BATTERY_CHANGED)
+            addAction(Intent.ACTION_POWER_CONNECTED)
+            addAction(Intent.ACTION_POWER_DISCONNECTED)
+        }
+        try {
+            registerReceiver(br, bf)
+            batteryReceiver = br
+        } catch (_: Exception) {}
+
+        // Network events
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        if (cm != null) {
+            val nl = NetworkListener(cm)
+            nl.start()
+            networkListener = nl
         }
     }
 
@@ -159,6 +195,12 @@ class AvatarService : Service() {
 
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
+        networkListener?.stop()
+        networkListener = null
+        batteryReceiver?.let { try { unregisterReceiver(it) } catch (_: Exception) {} }
+        batteryReceiver = null
+        bridgeServer?.stop()
+        bridgeServer = null
         stateManager?.let { EventBus.unsubscribe(it::onEvent) }
         stateManager = null
         nextStateProvider = null
