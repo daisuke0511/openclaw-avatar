@@ -91,8 +91,11 @@ class RealtimeClient(
 
     fun sendSessionUpdate(tools: JSONArray?) {
         val socket = ws ?: return
-        val session = JSONObject()
-        if (tools != null) session.put("tools", tools)
+        val session = JSONObject().put("type", "realtime")
+        if (tools != null) {
+            session.put("tools", tools)
+            session.put("tool_choice", "auto")
+        }
         socket.send(JSONObject()
             .put("type", "session.update")
             .put("session", session)
