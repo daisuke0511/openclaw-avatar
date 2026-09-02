@@ -107,7 +107,7 @@ class RealtimeClient(
 
     private val listener = object : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
-            Log.i(TAG, "ws open: ${response.code} ${response.message} proto=${response.header("Sec-WebSocket-Protocol")}")
+            ConversationLog.log(TAG, "ws open: ${response.code} ${response.message} proto=${response.header("Sec-WebSocket-Protocol")}")
             callbacks.onOpen()
         }
 
@@ -116,7 +116,7 @@ class RealtimeClient(
                 val obj = JSONObject(text)
                 val eventType = obj.optString("type")
                 if (eventType != "response.audio.delta" && eventType != "response.audio_transcript.delta") {
-                    Log.d(TAG, "event: $eventType")
+                    ConversationLog.log(TAG, "event: $eventType")
                 }
                 when (val type = eventType) {
                     "session.created", "session.updated" -> callbacks.onSessionUpdated()
@@ -163,7 +163,7 @@ class RealtimeClient(
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
             val bodySnippet = try { response?.body?.string()?.take(300) } catch (_: Exception) { null }
-            Log.e(TAG, "ws failure: ${t.message} code=${response?.code} body=$bodySnippet")
+            ConversationLog.error(TAG, "ws failure: ${t.message} code=${response?.code} body=$bodySnippet")
             callbacks.onError("ws failed ${response?.code}: ${t.message} ${bodySnippet ?: ""}")
         }
 

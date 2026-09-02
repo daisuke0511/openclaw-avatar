@@ -112,7 +112,7 @@ class ConversationService : Service() {
         Thread({
             val tokenResp = fetchEphemeralToken()
             if (tokenResp == null) {
-                Log.e(TAG, "ephemeral token fetch failed")
+                ConversationLog.error(TAG, "ephemeral token fetch failed")
                 transition(ConversationState.ERROR)
                 main.postDelayed({ stopSelf() }, 2000)
                 return@Thread
@@ -135,7 +135,7 @@ class ConversationService : Service() {
 
             val rt = RealtimeClient(model, token, object : RealtimeClient.Callbacks {
                 override fun onOpen() {
-                    Log.i(TAG, "T-open: ${System.currentTimeMillis()}")
+                    ConversationLog.log(TAG, "T-open: ${System.currentTimeMillis()}")
                     // Register tool schemas
                     realtime?.sendSessionUpdate(bridge.toolSpecs())
                     transition(ConversationState.LISTENING)
@@ -144,7 +144,7 @@ class ConversationService : Service() {
                 }
                 override fun onSessionUpdated() {}
                 override fun onUserSpeechStarted() {
-                    Log.i(TAG, "T-userStart: ${System.currentTimeMillis()}")
+                    ConversationLog.log(TAG, "T-userStart: ${System.currentTimeMillis()}")
                     // Barge-in: user began talking → cancel any in-flight response and drop TTS
                     if (state.get() == ConversationState.AI_SPEAKING) {
                         pb.stopAndFlush()
@@ -157,16 +157,16 @@ class ConversationService : Service() {
                     lastVoiceActivity = System.currentTimeMillis()
                 }
                 override fun onUserSpeechStopped() {
-                    Log.i(TAG, "T-userStop: ${System.currentTimeMillis()}")
+                    ConversationLog.log(TAG, "T-userStop: ${System.currentTimeMillis()}")
                     transition(ConversationState.THINKING)
                     lastVoiceActivity = System.currentTimeMillis()
                 }
                 override fun onResponseStarted() {
-                    Log.i(TAG, "T-responseStart: ${System.currentTimeMillis()}")
+                    ConversationLog.log(TAG, "T-responseStart: ${System.currentTimeMillis()}")
                 }
                 override fun onAudioDelta(pcm: ByteArray) {
                     if (state.get() != ConversationState.AI_SPEAKING) {
-                        Log.i(TAG, "T-firstAudio: ${System.currentTimeMillis()}")
+                        ConversationLog.log(TAG, "T-firstAudio: ${System.currentTimeMillis()}")
                         transition(ConversationState.AI_SPEAKING)
                     }
                     pb.enqueue(pcm)
@@ -178,10 +178,10 @@ class ConversationService : Service() {
                     }
                 }
                 override fun onUserTranscript(text: String) {
-                    Log.i(TAG, "user: $text")
+                    ConversationLog.log(TAG, "user: $text")
                 }
                 override fun onAssistantText(text: String) {
-                    Log.i(TAG, "ai: $text")
+                    ConversationLog.log(TAG, "ai: $text")
                 }
                 override fun onFunctionCall(callId: String, name: String, argumentsJson: String) {
                     transition(ConversationState.TOOL_CALLING)
@@ -193,12 +193,12 @@ class ConversationService : Service() {
                     }, "tool-call").apply { isDaemon = true; start() }
                 }
                 override fun onError(message: String) {
-                    Log.e(TAG, "realtime error: $message")
+                    ConversationLog.error(TAG, "realtime error: $message")
                     transition(ConversationState.ERROR)
                     main.postDelayed({ stopSelf() }, 3000)
                 }
                 override fun onClosed(code: Int, reason: String) {
-                    Log.i(TAG, "realtime closed: $code $reason")
+                    ConversationLog.log(TAG, "realtime closed: $code $reason")
                     if (running) {
                         transition(ConversationState.OFF)
                         stopSelf()
@@ -213,7 +213,7 @@ class ConversationService : Service() {
                 realtime?.sendAudioFrame(frame)
             }
             if (!cap.start()) {
-                Log.e(TAG, "microphone unavailable")
+                ConversationLog.error(TAG, "microphone unavailable")
                 transition(ConversationState.ERROR)
                 main.postDelayed({ stopSelf() }, 2000)
                 return@Thread
@@ -237,7 +237,7 @@ class ConversationService : Service() {
                 secret to model
             }
         } catch (e: Exception) {
-            Log.e(TAG, "token fetch: ${e.message}")
+            ConversationLog.error(TAG, "token fetch: ${e.message}")
             null
         }
     }
@@ -248,7 +248,7 @@ class ConversationService : Service() {
             override fun run() {
                 val idle = System.currentTimeMillis() - lastVoiceActivity
                 if (idle > SILENCE_TIMEOUT_MS && running) {
-                    Log.i(TAG, "silence timeout, stopping")
+                    ConversationLog.log(TAG, "silence timeout, stopping")
                     stopSelf()
                     return
                 }
@@ -284,7 +284,7 @@ class ConversationService : Service() {
     private fun transition(next: ConversationState) {
         val prev = state.getAndSet(next)
         if (prev == next) return
-        Log.i(TAG, "state: $prev -> $next")
+        ConversationLog.log(TAG, "state: $prev -> $next")
         // Emit corresponding semantic (avatar mirrors conversation state)
         val (sem, prio) = when (next) {
             ConversationState.CONNECTING    -> SemanticState.SURPRISED to Priority.SYSTEM_EVENT

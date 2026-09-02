@@ -1,11 +1,13 @@
 package com.openclaw.avatar.bridge
 
+import com.openclaw.avatar.conversation.ConversationLog
 import com.openclaw.avatar.events.AvatarEvent
 import com.openclaw.avatar.events.EventBus
 import com.openclaw.avatar.events.MoveDir
 import com.openclaw.avatar.events.Priority
 import com.openclaw.avatar.events.SemanticState
 import com.openclaw.avatar.state.AvatarStateManager
+import org.json.JSONArray
 import org.json.JSONObject
 
 class BridgeRouter(private val manager: AvatarStateManager) {
@@ -16,6 +18,7 @@ class BridgeRouter(private val manager: AvatarStateManager) {
             req.method == "POST" && req.path == "/avatar/action" -> handleAction(req.body)
             req.method == "POST" && req.path == "/avatar/move"   -> handleMove(req.body)
             req.method == "GET"  && req.path == "/avatar/status" -> handleStatus()
+            req.method == "GET"  && req.path == "/conversation/log" -> handleConversationLog()
             else -> BridgeResponse(404, """{"error":"not found"}""")
         }
     } catch (e: Exception) {
@@ -49,6 +52,13 @@ class BridgeRouter(private val manager: AvatarStateManager) {
         val dir = MoveDir.valueOf(dirName.uppercase())
         EventBus.publish(AvatarEvent.Move(dir = dir, durationMs = duration, source = "http"))
         return BridgeResponse(200, """{"ok":true,"direction":"${dir.name}"}""")
+    }
+
+    private fun handleConversationLog(): BridgeResponse {
+        val entries = ConversationLog.snapshot()
+        val arr = JSONArray()
+        for (e in entries) arr.put(e)
+        return BridgeResponse(200, JSONObject().put("entries", arr).toString())
     }
 
     private fun handleStatus(): BridgeResponse {
