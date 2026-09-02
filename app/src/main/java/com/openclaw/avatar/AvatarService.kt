@@ -18,6 +18,10 @@ import android.view.View
 import android.view.WindowManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import com.openclaw.avatar.events.AvatarEvent
+import com.openclaw.avatar.events.EventBus
+import com.openclaw.avatar.state.AvatarStateManager
+import com.openclaw.avatar.state.NextStateProvider
 import kotlin.math.abs
 import kotlin.random.Random
 
@@ -29,6 +33,7 @@ class AvatarService : Service() {
         const val FRAME_MS = 200L   // animation frame interval (ms)
         const val TICK_MS  = 33L    // movement tick interval (~30fps)
         const val SPEED_DP = 2.2f
+        const val TAP_SLOP_DP = 8f  // touch below this distance = tap
     }
 
     // --- State machine ---
@@ -103,9 +108,21 @@ class AvatarService : Service() {
     private var dragStartRawY = 0f
     private var dragStartParamX = 0
     private var dragStartParamY = 0
+    private var gestureMoved = false
 
     private val handler = Handler(Looper.getMainLooper())
     private var animTick = 0
+
+    // --- Integration hooks (Phase 2/3) ---
+    internal var nextStateProvider: NextStateProvider? = null
+    private var stateManager: AvatarStateManager? = null
+
+    // Position accessor for state manager snapshots
+    internal val positionX: Int get() = layoutParams?.x ?: 0
+    internal val positionY: Int get() = layoutParams?.y ?: 0
+    internal val currentAvatarState: State get() = currentState
+    internal val currentFrameIndex: Int get() = frameIndex
+    internal val currentStateEndTime: Long get() = stateEndTime
 
     private val mainRunnable = object : Runnable {
         override fun run() {
@@ -128,6 +145,10 @@ class AvatarService : Service() {
         super.onCreate()
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         createNotificationChannel()
+        stateManager = AvatarStateManager(this).also {
+            nextStateProvider = it
+            EventBus.subscribe(it::onEvent)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -138,6 +159,9 @@ class AvatarService : Service() {
 
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
+        stateManager?.let { EventBus.unsubscribe(it::onEvent) }
+        stateManager = null
+        nextStateProvider = null
         removeOverlay()
         super.onDestroy()
     }
@@ -212,6 +236,21 @@ class AvatarService : Service() {
         }
     }
 
+    /** Externally-triggered state entry. Marshals to main thread. */
+    fun forceEnterState(state: State, durationMs: Long?) {
+        handler.post {
+            currentState = state
+            frameIndex = 0
+            val cfg = stateConfigs[state]!!
+            val dur = durationMs ?: (cfg.minDurMs + Random.nextLong(cfg.maxDurMs - cfg.minDurMs + 1))
+            stateEndTime = System.currentTimeMillis() + dur
+            avatarView?.showSprite(cfg.frames[0])
+            if (state == State.JUMP) {
+                jumpVelY = -(SPEED_DP * dm.density * 4f)
+            }
+        }
+    }
+
     private fun advanceFrame() {
         val frames = stateConfigs[currentState]!!.frames
         if (frames.size > 1) {
@@ -222,8 +261,9 @@ class AvatarService : Service() {
 
     private fun checkStateTransition() {
         if (System.currentTimeMillis() < stateEndTime) return
-        val candidates = nextStates[currentState]!!
-        enterState(candidates[Random.nextInt(candidates.size)])
+        val override = nextStateProvider?.nextState(currentState)
+        val next = override ?: nextStates[currentState]!!.let { it[Random.nextInt(it.size)] }
+        enterState(next)
     }
 
     // --- Movement ---
@@ -263,30 +303,44 @@ class AvatarService : Service() {
 
     // --- Drag ---
 
-    private fun buildDragListener(params: WindowManager.LayoutParams): View.OnTouchListener =
-        View.OnTouchListener { view, event ->
+    private fun buildDragListener(params: WindowManager.LayoutParams): View.OnTouchListener {
+        val slopPx = TAP_SLOP_DP * dm.density
+        return View.OnTouchListener { view, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     isDragging = true
+                    gestureMoved = false
                     dragStartRawX = event.rawX; dragStartRawY = event.rawY
                     dragStartParamX = params.x; dragStartParamY = params.y
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
                     val statusBarH = (24 * dm.density).toInt()
-                    params.x = (dragStartParamX + (event.rawX - dragStartRawX).toInt())
+                    val dx = event.rawX - dragStartRawX
+                    val dy = event.rawY - dragStartRawY
+                    if (!gestureMoved && (abs(dx) > slopPx || abs(dy) > slopPx)) {
+                        gestureMoved = true
+                    }
+                    params.x = (dragStartParamX + dx.toInt())
                         .coerceIn(0, dm.widthPixels - view.width)
-                    params.y = (dragStartParamY + (event.rawY - dragStartRawY).toInt())
+                    params.y = (dragStartParamY + dy.toInt())
                         .coerceIn(statusBarH, dm.heightPixels - view.height)
                     try { windowManager.updateViewLayout(view, params) } catch (_: Exception) {}
                     true
                 }
                 MotionEvent.ACTION_UP -> {
                     isDragging = false
-                    enterState(listOf(State.WAVE, State.JUMP, State.IDLE).random())
+                    if (gestureMoved) {
+                        // Preserve legacy behavior after a real drag
+                        enterState(listOf(State.WAVE, State.JUMP, State.IDLE).random())
+                    } else {
+                        // Pure tap → semantic Tap event; StateManager maps → WAVE
+                        EventBus.publish(AvatarEvent.Tap())
+                    }
                     true
                 }
                 else -> false
             }
         }
+    }
 }
