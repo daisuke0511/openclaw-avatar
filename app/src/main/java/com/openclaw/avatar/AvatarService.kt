@@ -23,6 +23,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.openclaw.avatar.bridge.AvatarBridgeServer
 import com.openclaw.avatar.bridge.BridgeRouter
+import com.openclaw.avatar.conversation.ConversationService
 import com.openclaw.avatar.events.AvatarEvent
 import com.openclaw.avatar.events.EventBus
 import com.openclaw.avatar.state.AvatarStateManager
@@ -376,8 +377,19 @@ class AvatarService : Service() {
                         // Preserve legacy behavior after a real drag
                         enterState(listOf(State.WAVE, State.JUMP, State.IDLE).random())
                     } else {
-                        // Pure tap → semantic Tap event; StateManager maps → WAVE
-                        EventBus.publish(AvatarEvent.Tap())
+                        // Pure tap → toggle conversation mode
+                        val convIntent = Intent(this@AvatarService, ConversationService::class.java)
+                        if (ConversationService.isActive()) {
+                            convIntent.action = ConversationService.ACTION_STOP
+                            try { startService(convIntent) } catch (_: Exception) {}
+                        } else {
+                            convIntent.action = ConversationService.ACTION_START
+                            try {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                    startForegroundService(convIntent)
+                                } else startService(convIntent)
+                            } catch (_: Exception) {}
+                        }
                     }
                     true
                 }
