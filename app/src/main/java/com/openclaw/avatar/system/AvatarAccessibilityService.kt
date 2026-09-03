@@ -3,8 +3,12 @@ package com.openclaw.avatar.system
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
+import android.graphics.Rect
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityNodeInfo
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * Accessibility Service that lets the AI tap and swipe on the screen.
@@ -50,6 +54,56 @@ class AvatarAccessibilityService : AccessibilityService() {
         val stroke = GestureDescription.StrokeDescription(path, 0L, durationMs)
         val gesture = GestureDescription.Builder().addStroke(stroke).build()
         return dispatchGesture(gesture, null, null)
+    }
+
+    /** Snapshot the visible screen as a JSON tree of text + clickable elements. */
+    fun readScreen(): String {
+        val root = rootInActiveWindow ?: return """{"error":"no active window"}"""
+        val texts = JSONArray()
+        val clickables = JSONArray()
+        val editables = JSONArray()
+        walk(root, texts, clickables, editables, depth = 0, maxDepth = 30)
+        val pkg = root.packageName?.toString() ?: ""
+        return JSONObject()
+            .put("app", pkg)
+            .put("texts", texts)
+            .put("editable_fields", editables)
+            .put("clickable_elements", clickables)
+            .toString()
+    }
+
+    private fun walk(
+        node: AccessibilityNodeInfo?,
+        texts: JSONArray, clickables: JSONArray, editables: JSONArray,
+        depth: Int, maxDepth: Int
+    ) {
+        if (node == null || depth > maxDepth) return
+        try {
+            val label = node.text?.toString()
+            val hint = node.hintText?.toString()
+            val desc = node.contentDescription?.toString()
+            val rect = Rect().also { node.getBoundsInScreen(it) }
+            if (node.isEditable) {
+                editables.put(JSONObject()
+                    .put("text", label ?: "")
+                    .put("hint", hint ?: "")
+                    .put("cx", rect.centerX())
+                    .put("cy", rect.centerY()))
+            } else if (!label.isNullOrBlank() && texts.length() < 60) {
+                texts.put(label)
+            } else if (!desc.isNullOrBlank() && texts.length() < 60) {
+                texts.put(desc)
+            }
+            if (node.isClickable && clickables.length() < 40) {
+                clickables.put(JSONObject()
+                    .put("text", label ?: desc ?: "")
+                    .put("cx", rect.centerX())
+                    .put("cy", rect.centerY()))
+            }
+            for (i in 0 until node.childCount) {
+                walk(node.getChild(i), texts, clickables, editables, depth + 1, maxDepth)
+            }
+        } catch (_: Exception) {}
     }
 
     fun globalBack(): Boolean    = performGlobalAction(GLOBAL_ACTION_BACK)

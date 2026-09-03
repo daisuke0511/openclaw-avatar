@@ -25,12 +25,16 @@ class DeviceTools(private val ctx: Context) {
     fun specs(): JSONArray {
         val arr = JSONArray()
         arr.put(tool("open_app",
-            "Launch an installed app by its exact package name (e.g. 'com.android.chrome'). " +
-            "Use list_installed_apps if you need to find one first.",
+            "Launch an installed app. Provide either its package name (e.g. 'com.android.chrome') " +
+            "or its display label (e.g. 'Chrome', 'ChatGPT'). Label match is case-insensitive substring. " +
+            "If ambiguous, we pick the first match.",
             JSONObject().put("type", "object")
                 .put("properties", JSONObject()
-                    .put("package", JSONObject().put("type", "string")))
-                .put("required", JSONArray().put("package"))))
+                    .put("package", JSONObject().put("type", "string")
+                        .put("description", "Exact package name; use this or 'name'"))
+                    .put("name", JSONObject().put("type", "string")
+                        .put("description", "Display name substring; used if package is missing")))
+                .put("required", JSONArray())))
         arr.put(tool("list_installed_apps",
             "List launchable apps installed on the phone. Returns package + label pairs.",
             JSONObject().put("type", "object").put("properties", JSONObject()).put("required", JSONArray())))
@@ -95,6 +99,11 @@ class DeviceTools(private val ctx: Context) {
         arr.put(tool("get_screen_size",
             "Returns the phone screen dimensions in pixels {width, height} for coordinate math.",
             JSONObject().put("type", "object").put("properties", JSONObject()).put("required", JSONArray())))
+        arr.put(tool("read_screen",
+            "Read the current foreground screen: dumps visible text, edit-field contents, and " +
+            "clickable elements with their center coordinates. Use this to understand what the " +
+            "user is looking at or typing before acting on the screen.",
+            JSONObject().put("type", "object").put("properties", JSONObject()).put("required", JSONArray())))
         return arr
     }
 
@@ -107,7 +116,8 @@ class DeviceTools(private val ctx: Context) {
     fun canHandle(name: String): Boolean = when (name) {
         "open_app", "list_installed_apps", "open_url", "search_web",
         "vibrate_phone", "toggle_flashlight", "set_media_volume",
-        "tap_screen", "swipe_screen", "press_button", "get_screen_size" -> true
+        "tap_screen", "swipe_screen", "press_button", "get_screen_size",
+        "read_screen" -> true
         else -> false
     }
 
@@ -115,7 +125,9 @@ class DeviceTools(private val ctx: Context) {
         val args = try { JSONObject(argsJson) } catch (_: Exception) { JSONObject() }
         return try {
             when (name) {
-                "open_app"            -> openApp(args.optString("package"))
+                "open_app"            -> openApp(
+                    args.optString("package"),
+                    args.optString("name"))
                 "list_installed_apps" -> listApps()
                 "open_url"            -> openUrl(args.optString("url"))
                 "search_web"          -> searchWeb(args.optString("query"))
@@ -130,6 +142,7 @@ class DeviceTools(private val ctx: Context) {
                     args.optInt("duration_ms", 300).toLong())
                 "press_button"        -> pressButton(args.optString("button"))
                 "get_screen_size"     -> getScreenSize()
+                "read_screen"         -> readScreen()
                 else -> """{"error":"unknown tool"}"""
             }
         } catch (e: Exception) {
@@ -139,13 +152,40 @@ class DeviceTools(private val ctx: Context) {
 
     // --- Individual actions ---
 
-    private fun openApp(pkg: String): String {
-        if (pkg.isBlank()) return """{"error":"package required"}"""
-        val intent = ctx.packageManager.getLaunchIntentForPackage(pkg)
-            ?: return """{"error":"app not installed: $pkg"}"""
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        ctx.startActivity(intent)
-        return """{"ok":true,"launched":"$pkg"}"""
+    private fun openApp(pkgArg: String, nameArg: String): String {
+        val pm = ctx.packageManager
+        // 1) try exact package
+        val pkg = pkgArg.trim().ifBlank { null }
+        if (pkg != null) {
+            pm.getLaunchIntentForPackage(pkg)?.let {
+                it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                ctx.startActivity(it)
+                return """{"ok":true,"launched":"$pkg"}"""
+            }
+        }
+        // 2) fuzzy label lookup
+        val query = nameArg.ifBlank { pkgArg }.trim()
+        if (query.isBlank()) return """{"error":"package or name required"}"""
+        val intent = Intent(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) }
+        val results = pm.queryIntentActivities(intent, 0)
+        val lowerQ = query.lowercase()
+        val best = results.firstOrNull { r ->
+            r.loadLabel(pm).toString().lowercase() == lowerQ
+        } ?: results.firstOrNull { r ->
+            r.loadLabel(pm).toString().lowercase().contains(lowerQ)
+        } ?: results.firstOrNull { r ->
+            r.activityInfo?.packageName?.lowercase()?.contains(lowerQ) == true
+        }
+        if (best == null) {
+            return """{"error":"no app matching '$query'"}"""
+        }
+        val foundPkg = best.activityInfo.packageName
+        pm.getLaunchIntentForPackage(foundPkg)?.let {
+            it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            ctx.startActivity(it)
+            return """{"ok":true,"launched":"$foundPkg","label":"${best.loadLabel(pm)}"}"""
+        }
+        return """{"error":"found $foundPkg but launch intent missing"}"""
     }
 
     private fun listApps(): String {
@@ -249,5 +289,10 @@ class DeviceTools(private val ctx: Context) {
         val dm = DisplayMetrics()
         wm.defaultDisplay.getRealMetrics(dm)
         return """{"width":${dm.widthPixels},"height":${dm.heightPixels},"density":${dm.density}}"""
+    }
+
+    private fun readScreen(): String {
+        val svc = a11yOrError() ?: return """{"error":"accessibility service not enabled"}"""
+        return svc.readScreen()
     }
 }

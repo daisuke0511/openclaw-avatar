@@ -36,7 +36,7 @@ class ConversationService : Service() {
         private const val NOTIFICATION_ID = 1002
         const val ACTION_START = "com.openclaw.avatar.CONV_START"
         const val ACTION_STOP  = "com.openclaw.avatar.CONV_STOP"
-        const val SILENCE_TIMEOUT_MS = 30_000L
+        const val SILENCE_TIMEOUT_MS = 120_000L
 
         @Volatile private var running: Boolean = false
         fun isActive(): Boolean = running
