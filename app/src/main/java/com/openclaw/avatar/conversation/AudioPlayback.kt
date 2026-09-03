@@ -36,7 +36,9 @@ class AudioPlayback {
         val channelCfg = AudioFormat.CHANNEL_OUT_MONO
         val encoding = AudioFormat.ENCODING_PCM_16BIT
         val minBuf = AudioTrack.getMinBufferSize(SAMPLE_RATE, channelCfg, encoding)
-        val bufSize = maxOf(minBuf, SAMPLE_RATE * 2 / 5) // ~200ms
+        // Small buffer keeps latency low so barge-in flush stops audio quickly.
+        // 24000 samples/s * 2 bytes * 0.08s ≈ 3840 bytes (~80ms)
+        val bufSize = maxOf(minBuf, 3840)
         val at = try {
             AudioTrack(
                 AudioAttributes.Builder()
@@ -92,8 +94,18 @@ class AudioPlayback {
 
     /** Immediately discards all buffered audio (for barge-in). */
     fun stopAndFlush() {
+        // 1) prevent new writes: drain queue
         queue.clear()
-        try { track?.pause(); track?.flush(); track?.play() } catch (_: Exception) {}
+        // 2) hard stop AudioTrack: pause + flush is not enough on some devices
+        //    that hold ~200ms of PCM in the mixer. stop() truncates hardware buffer.
+        val t = track ?: return
+        try {
+            t.pause()
+            t.flush()
+            // On modern devices, stop() forcibly terminates output faster than pause
+            try { t.stop() } catch (_: Exception) {}
+            try { t.play() } catch (_: Exception) {}
+        } catch (_: Exception) {}
         totalWrittenBytes = 0
         totalPlayedBytes = 0
     }
