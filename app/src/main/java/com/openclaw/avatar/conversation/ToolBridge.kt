@@ -14,6 +14,7 @@ import java.util.concurrent.TimeUnit
  * via HTTP so we don't need to embed OpenClaw logic in the Android app.
  */
 class ToolBridge(
+    private val deviceTools: DeviceTools? = null,
     private val roomBase: String = "http://127.0.0.1:8787",
     private val avatarBase: String = "http://127.0.0.1:8791",
 ) {
@@ -24,6 +25,10 @@ class ToolBridge(
 
     fun toolSpecs(): JSONArray {
         val arr = JSONArray()
+        // Device-side tools first (open apps, tap screen, etc.)
+        deviceTools?.specs()?.let { d ->
+            for (i in 0 until d.length()) arr.put(d.getJSONObject(i))
+        }
         arr.put(tool("get_battery_status",
             "Get the phone's current battery percentage and charging state.",
             JSONObject().put("type", "object").put("properties", JSONObject()).put("required", JSONArray())))
@@ -62,6 +67,10 @@ class ToolBridge(
      * Executes a tool call. Returns a JSON string safe for `function_call_output.output`.
      */
     fun execute(name: String, argsJson: String): String {
+        // Device-side tools handled locally (no HTTP roundtrip)
+        if (deviceTools?.canHandle(name) == true) {
+            return deviceTools.execute(name, argsJson)
+        }
         val args = try { JSONObject(argsJson) } catch (_: Exception) { JSONObject() }
         return try {
             when (name) {

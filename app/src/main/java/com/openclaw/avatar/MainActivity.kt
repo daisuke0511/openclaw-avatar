@@ -11,6 +11,7 @@ import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import com.openclaw.avatar.system.AvatarAccessibilityService
 
 class MainActivity : AppCompatActivity() {
 
@@ -55,6 +56,16 @@ class MainActivity : AppCompatActivity() {
         this, Manifest.permission.RECORD_AUDIO
     ) == PackageManager.PERMISSION_GRANTED
 
+    private fun hasAccessibilityService(): Boolean {
+        // Runtime instance check; when the singleton exists the service is connected.
+        if (AvatarAccessibilityService.isEnabled()) return true
+        // Fallback: parse the enabled services list from Settings.
+        val enabled = Settings.Secure.getString(
+            contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: ""
+        return enabled.contains("$packageName/.system.AvatarAccessibilityService")
+    }
+
     private fun grantMissingPermissions() {
         if (!hasOverlayPermission()) {
             val intent = Intent(
@@ -64,6 +75,11 @@ class MainActivity : AppCompatActivity() {
             overlayPermLauncher.launch(intent)
         } else if (!hasMicPermission()) {
             micPermLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        } else if (!hasAccessibilityService()) {
+            try {
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (_: Exception) {}
         }
     }
 
@@ -79,15 +95,18 @@ class MainActivity : AppCompatActivity() {
     private fun refreshUi() {
         val hasOverlay = hasOverlayPermission()
         val hasMic = hasMicPermission()
+        val hasA11y = hasAccessibilityService()
         tvStatus.text = when {
             !hasOverlay -> "Overlay permission required"
             !hasMic     -> "Microphone permission recommended for voice chat"
+            !hasA11y    -> "Accessibility recommended so I can tap the screen"
             else        -> "Ready — tap avatar to talk"
         }
-        btnPermission.isEnabled = !hasOverlay || !hasMic
+        btnPermission.isEnabled = !hasOverlay || !hasMic || !hasA11y
         btnPermission.text = when {
             !hasOverlay -> "Grant Overlay"
             !hasMic     -> "Grant Microphone"
+            !hasA11y    -> "Enable Accessibility"
             else        -> "All Set"
         }
         btnStart.isEnabled = hasOverlay

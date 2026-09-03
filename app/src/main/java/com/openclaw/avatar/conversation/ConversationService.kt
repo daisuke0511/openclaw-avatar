@@ -130,7 +130,7 @@ class ConversationService : Service() {
             val pb = AudioPlayback().also { it.start() }
             playback = pb
 
-            val bridge = ToolBridge()
+            val bridge = ToolBridge(deviceTools = DeviceTools(this@ConversationService.applicationContext))
             toolBridge = bridge
 
             val rt = RealtimeClient(model, token, object : RealtimeClient.Callbacks {

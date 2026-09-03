@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">makana</string>
+    <string name="a11y_description">makanaが画面をタップして操作できるようにします</string>
 </resources>
